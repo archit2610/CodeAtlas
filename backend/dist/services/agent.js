@@ -1,0 +1,37 @@
+import { ApiError } from "../utils/api-error.js";
+import { fetchAndExtract } from "../lib/reader.js";
+import { searchWeb } from "../lib/searcher.js";
+import { planResearch } from "../lib/planner.js";
+import { writerReport } from "../lib/writer.js";
+import { withTimeout } from "../utils/timeout.js";
+export const runResearch = async (question, emit) => {
+    let context = '';
+    emit({ type: 'stage', label: 'Planning research...' });
+    try {
+        const plan = await withTimeout(planResearch(question), 20000);
+        if (plan.needsWebSearch) {
+            if (plan.subQuestions.length > 5)
+                plan.subQuestions = plan.subQuestions.slice(0, 5);
+            const { subQuestions } = plan;
+            emit({ type: 'plan', subQuestions });
+            const searches = await withTimeout(Promise.all(subQuestions.map(q => searchWeb(q))), 20_000, []);
+            const results = searches
+                .flat()
+                .filter((r) => r !== null);
+            const uniqueResults = results
+                .filter((result, index, self) => index === self.findIndex(r => r.url === result.url))
+                .slice(0, 8);
+            emit({ type: "stage", label: "Reading sources..." });
+            context = await withTimeout(fetchAndExtract(uniqueResults, question), 20000, "");
+            context = context.slice(0, 20000);
+        }
+        emit({ type: "stage", label: "Writing Report" });
+        const report = await withTimeout(writerReport(question, context, emit), 30000);
+        return report;
+    }
+    catch (err) {
+        console.error(err);
+        throw new ApiError(400, "Error getting answer");
+    }
+};
+//# sourceMappingURL=agent.js.map

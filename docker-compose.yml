@@ -1,0 +1,21 @@
+services:
+  codeatlas-db:
+    image: pgvector/pgvector:pg16
+    container_name: codeatlas-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: codeatlas
+      POSTGRES_USER: codeatlas
+      POSTGRES_PASSWORD: codeatlas_local_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - codeatlas-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codeatlas -d codeatlas"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  codeatlas-postgres-data:
