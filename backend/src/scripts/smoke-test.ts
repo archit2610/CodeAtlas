@@ -9,6 +9,7 @@ async function runSmokeTest() {
     // 1. Test Demo Repository Import
     console.log('1️⃣ Testing importDemoRepository...');
     const repo = await importDemoRepository(visitorId);
+    if (!repo) throw new Error('Failed to create demo repository');
     console.log(`   ✅ Repo Created! ID: ${repo.id}, Status: ${repo.status}, Name: ${repo.name}`);
 
     if (repo.status !== 'ready') {

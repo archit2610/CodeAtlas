@@ -33,5 +33,7 @@ export interface RepositorySnapshot {
     componentFiles: string[];
     symbolCount: number;
     dependencyEdgeCount: number;
+    suggestedPrompts?: string[];
+    [key: string]: unknown;
 }
 //# sourceMappingURL=repository.d.ts.map

@@ -21,7 +21,25 @@ export declare function importPublicRepository(visitorId: string, sourceUrl: str
     createdAt: Date;
     updatedAt: Date;
 } | undefined>;
-export declare const getRepository: (id: string, v: string) => Promise<{
+export declare function importDemoRepository(visitorId: string): Promise<{
+    id: string;
+    visitorId: string;
+    sourceType: string;
+    sourceUrl: string;
+    owner: string | null;
+    name: string;
+    defaultBranch: string | null;
+    commitSha: string | null;
+    status: string;
+    languages: Record<string, number>;
+    frameworks: string[];
+    snapshotJson: Record<string, unknown>;
+    errorMessage: string | null;
+    expiresAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+} | undefined>;
+export declare const getRepository: (id: string, visitorId: string) => Promise<{
     id: string;
     visitorId: string;
     sourceType: string;
@@ -183,7 +201,7 @@ export declare const getTree: (id: string) => Omit<import("drizzle-orm/pg-core")
         generated: undefined;
     }, {}, {}>;
 }>, "where">;
-export declare const getFile: (id: string, p: string) => Promise<{
+export declare const getFile: (id: string, pathParam: string) => Promise<{
     id: string;
     repositoryId: string;
     path: string;
@@ -204,7 +222,7 @@ export declare const getFile: (id: string, p: string) => Promise<{
     }[];
     createdAt: Date;
 } | null>;
-export declare const searchFiles: (id: string, q: string) => Omit<import("drizzle-orm/pg-core").PgSelectBase<"repository_files", {
+export declare const searchFiles: (id: string, query: string) => Omit<import("drizzle-orm/pg-core").PgSelectBase<"repository_files", {
     path: import("drizzle-orm/pg-core").PgColumn<{
         name: "path";
         tableName: "repository_files";

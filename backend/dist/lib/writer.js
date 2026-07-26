@@ -1,22 +1,11 @@
 import { streamText } from "ai";
 import { google } from "@ai-sdk/google";
-export const writerReport = async (question, context, emit) => {
+import { buildAnswerPrompt } from "./prompts.js";
+export const writeRepositoryAnswer = async (request, contextBlock, intent = 'explain', emit) => {
+    const prompt = buildAnswerPrompt(intent, request, contextBlock);
     const result = await streamText({
-        model: google("gemini-2.5-flash"),
-        prompt: `You are Scout's writer
-                Question:
-                ${question}
-
-                Context:
-                ${context || "No external context provided."}
-
-                Instructions:
-                - If external context is provided, answer using ONLY the provided context.
-                - If no external context is provided, answer using your internal knowledge.
-                - If the provided context is insufficient, explicitly say so.
-                - Organize the answer using markdown headings.
-                - Be comprehensive and avoid repetition.
-                - When using external context, cite the source URL after important claims.`
+        model: google('gemini-2.5-flash'),
+        prompt
     });
     let fullText = '';
     for await (const chunk of result.textStream) {
@@ -24,9 +13,7 @@ export const writerReport = async (question, context, emit) => {
         emit({ type: 'token', data: chunk });
     }
     const usage = await result.usage;
-    const cost = (usage?.inputTokens ?? 0) * 0.000003 +
-        (usage?.outputTokens ?? 0) * 0.000015;
-    console.log(fullText);
+    const cost = (usage?.inputTokens ?? 0) * 0.000003 + (usage?.outputTokens ?? 0) * 0.000015;
     return {
         reportMd: fullText,
         tokensUsed: (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0),

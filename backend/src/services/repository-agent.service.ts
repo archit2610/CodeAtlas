@@ -1,17 +1,14 @@
-import { google } from '@ai-sdk/google';
-import { generateObject, generateText } from 'ai';
-import { z } from 'zod';
 import { db } from '../db/index.js';
 import { agentRuns, repositories } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import {
     searchRepository,
     readFileLines,
-    getDependents,
-    getImports,
-    getRoutes
+    getDependents
 } from './repository-tools.service.js';
-import type { RepositoryIntent } from '../types/repository.js';
+import { classifyIntentDeterministically, planRepositoryChange } from '../lib/planner.js';
+import { writeRepositoryAnswer } from '../lib/writer.js';
+import { createConversation } from './conversation.service.js';
 
 type Emitter = (event: object) => void;
 
@@ -23,24 +20,6 @@ interface AgentRunOptions {
     emit: Emitter;
 }
 
-const IntentSchema = z.object({
-    intent: z.enum(['explain', 'trace', 'debug', 'impact', 'change_request']),
-    reasoning: z.string(),
-    targetKeywords: z.array(z.string()),
-});
-
-const ChangePlanSchema = z.object({
-    summary: z.string(),
-    riskLevel: z.enum(['low', 'medium', 'high']),
-    affectedFiles: z.array(z.object({
-        path: z.string(),
-        reason: z.string(),
-        action: z.enum(['modify', 'add', 'delete'])
-    })),
-    assumptions: z.array(z.string()),
-    unresolvedQuestions: z.array(z.string())
-});
-
 export const runRepositoryAgent = async ({
     repositoryId,
     visitorId,
@@ -51,31 +30,26 @@ export const runRepositoryAgent = async ({
     const [repo] = await db.select().from(repositories).where(eq(repositories.id, repositoryId));
     if (!repo) throw new Error('Repository not found');
 
+    // Auto-create or resolve persistent conversation thread
+    let activeConvoId = conversationId;
+    if (!activeConvoId) {
+        const convo = await createConversation(visitorId, request);
+        if (convo) {
+            activeConvoId = convo.id;
+        }
+    }
+
+    // Stage 1: Intent Analysis
     emit({ type: 'stage', label: 'Classifying request intent...' });
+    const { intent, keywords } = classifyIntentDeterministically(request);
+    emit({ type: 'intent', intent, keywords });
 
-    const classification = await generateObject({
-        model: google('gemini-2.5-flash'),
-        schema: IntentSchema,
-        prompt: `You are the CodeAtlas repository intelligence agent.
-Classify the user's intent for the following request:
-"${request}"
-
-Available Intents:
-- explain: How a feature/module works
-- trace: How data/request flows across files
-- debug: Why a bug/error is happening
-- impact: What breaks if a file/function changes
-- change_request: A request to write code, refactor, or fix a defect`
-    });
-
-    const intent = classification.object.intent;
-    emit({ type: 'intent', intent, keywords: classification.object.targetKeywords });
-
-    // Step 2: Tool Retrieval
-    emit({ type: 'stage', label: 'Retrieving relevant repository evidence...' });
+    // Stage 2: Code Retrieval & Dependency Tracing
+    const searchQueries = keywords.length > 0 ? keywords : [request.slice(0, 30)];
+    emit({ type: 'stage', label: `Searching repository for: "${searchQueries.join(', ')}"...` });
 
     const searchResults = await Promise.all(
-        classification.object.targetKeywords.slice(0, 3).map(kw => searchRepository(repositoryId, kw))
+        searchQueries.slice(0, 3).map(kw => searchRepository(repositoryId, kw))
     );
 
     const flatResults = searchResults.flat().slice(0, 5);
@@ -84,10 +58,10 @@ Available Intents:
 
     for (const match of flatResults) {
         try {
+            emit({ type: 'stage', label: `Reading code lines & tracing dependencies for ${match.path}...` });
             const fileData = await readFileLines(repositoryId, match.path, 1, 80);
             retrievedFilesContent.push(`### File: ${fileData.path}\n\`\`\`${fileData.language}\n${fileData.content}\n\`\`\``);
 
-            // Fetch dependents for impact/debug
             const dependents = await getDependents(repositoryId, match.path);
             const depPaths = dependents.map(d => d.fromPath).join(', ');
 
@@ -95,21 +69,20 @@ Available Intents:
                 path: fileData.path,
                 startLine: 1,
                 endLine: Math.min(30, fileData.totalLines),
-                claim: dependents.length ? `Imported by: ${depPaths}` : `Matched search query keyword`,
+                claim: dependents.length ? `Imported by: ${depPaths}` : `Matched search query`,
                 confidence: 'graph-confirmed'
             });
         } catch {
-            // ignore missing file errors gracefully
+            // ignore missing files gracefully
         }
     }
 
     const contextBlock = retrievedFilesContent.join('\n\n');
 
-    // Create Agent Run record in database
     const [agentRun] = await db.insert(agentRuns).values({
         repositoryId,
         visitorId,
-        conversationId: conversationId ?? null,
+        conversationId: activeConvoId ?? null,
         request,
         intent,
         status: intent === 'change_request' ? 'planning' : 'running',
@@ -118,33 +91,23 @@ Available Intents:
 
     if (!agentRun) throw new Error('Failed to create agent run record');
 
+    // Stage 3A: Change Request -> Structured Plan
     if (intent === 'change_request') {
         emit({ type: 'stage', label: 'Generating approval-gated change plan...' });
 
-        const planResult = await generateObject({
-            model: google('gemini-2.5-flash'),
-            schema: ChangePlanSchema,
-            prompt: `You are CodeAtlas Lead Architect. Create a safe structured change plan for:
-Request: "${request}"
-
-Repository Context:
-${contextBlock}
-
-List the exact files affected, reasons, risk level, assumptions, and unresolved questions.`
-        });
-
-        const planJson = planResult.object;
+        const planJson = await planRepositoryChange(request, contextBlock);
 
         await db.update(agentRuns).set({
             planJson: planJson as unknown as Record<string, unknown>,
             status: 'planning'
         }).where(eq(agentRuns.id, agentRun.id));
 
-        emit({ type: 'plan', plan: planJson, runId: agentRun.id });
+        emit({ type: 'plan', plan: planJson, runId: agentRun.id, conversationId: activeConvoId });
         emit({ type: 'stage', label: 'Awaiting plan approval before generating patch.' });
 
         return {
             runId: agentRun.id,
+            conversationId: activeConvoId,
             intent,
             plan: planJson,
             evidence: evidenceList,
@@ -152,36 +115,25 @@ List the exact files affected, reasons, risk level, assumptions, and unresolved 
         };
     }
 
-    // For explain, trace, debug, impact: stream the answer
+    // Stage 3B: Question -> Real-Time Streaming Writer
     emit({ type: 'stage', label: 'Synthesizing evidence-backed answer...' });
 
-    const answerResponse = await generateText({
-        model: google('gemini-2.5-flash'),
-        prompt: `You are CodeAtlas Repository Assistant. Provide a precise answer with file & line citations for:
-Question: "${request}"
-
-Retrieved Repository Code Snippets:
-${contextBlock}
-
-Rules:
-1. Cite exact file paths and line ranges (e.g. \`src/app.ts:L1-L15\`).
-2. Clearly distinguish confirmed facts from inference.
-3. State explicitly if evidence is insufficient.`
-    });
-
-    const answerMd = answerResponse.text;
+    const writerResult = await writeRepositoryAnswer(request, contextBlock, intent, emit);
 
     await db.update(agentRuns).set({
-        answerMd,
+        answerMd: writerResult.reportMd,
+        tokensUsed: writerResult.tokensUsed,
+        costUsd: writerResult.costUsd,
         status: 'completed'
     }).where(eq(agentRuns.id, agentRun.id));
 
-    emit({ type: 'answer', answerMd, evidence: evidenceList, runId: agentRun.id });
+    emit({ type: 'answer', answerMd: writerResult.reportMd, evidence: evidenceList, runId: agentRun.id, conversationId: activeConvoId });
 
     return {
         runId: agentRun.id,
+        conversationId: activeConvoId,
         intent,
-        answerMd,
+        answerMd: writerResult.reportMd,
         evidence: evidenceList,
         status: 'completed'
     };

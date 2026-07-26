@@ -1,34 +1,49 @@
 import { google } from '@ai-sdk/google';
 import { generateObject } from 'ai';
-import { z } from "zod";
-const PlannerSchema = z.object({
-    needsWebSearch: z.boolean(),
-    reason: z.string(),
-    subQuestions: z.array(z.string())
+import { z } from 'zod';
+export const ChangePlanSchema = z.object({
+    summary: z.string(),
+    riskLevel: z.enum(['low', 'medium', 'high']),
+    affectedFiles: z.array(z.object({
+        path: z.string(),
+        reason: z.string(),
+        action: z.enum(['modify', 'add', 'delete'])
+    })),
+    assumptions: z.array(z.string()),
+    unresolvedQuestions: z.array(z.string())
 });
-export const planResearch = async (question, retrievedMemoryContext = '') => {
+export const classifyIntentDeterministically = (request) => {
+    const lower = request.toLowerCase();
+    const keywords = lower
+        .replace(/[^a-z0-9_\-\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !['how', 'does', 'why', 'what', 'where', 'this', 'that', 'with', 'from', 'repo', 'repository', 'file', 'code', 'work', 'works', 'user', 'users'].includes(w));
+    let intent = 'explain';
+    if (/\b(fix|change|add|implement|update|refactor|remove|delete|create|modify|patch)\b/i.test(lower)) {
+        intent = 'change_request';
+    }
+    else if (/\b(trace|flow|path|sequence|steps|journey)\b/i.test(lower)) {
+        intent = 'trace';
+    }
+    else if (/\b(why|bug|error|issue|fail|failing|broken|loses|losing|crash)\b/i.test(lower)) {
+        intent = 'debug';
+    }
+    else if (/\b(impact|affect|breaks|break|blast|radius|consequence)\b/i.test(lower)) {
+        intent = 'impact';
+    }
+    return { intent, keywords: keywords.slice(0, 4) };
+};
+export const planRepositoryChange = async (request, contextBlock) => {
     const response = await generateObject({
-        model: google("gemini-2.5-flash"),
-        schema: PlannerSchema,
-        prompt: `
-                You are Scout's intelligent research planner.
+        model: google('gemini-2.5-flash'),
+        schema: ChangePlanSchema,
+        prompt: `You are CodeAtlas Lead Architect. Create a safe structured change plan for:
+Request: "${request}"
 
-                Current User Question:
-                "${question}"
+Repository Code Context:
+${contextBlock || 'No code context provided.'}
 
-                ${retrievedMemoryContext ? `Retrieved Context from Conversation Memory:\n${retrievedMemoryContext}\n` : 'No previous memory available.'}
-
-                Instructions:
-                1. Evaluate if the retrieved conversation memory is SUFFICIENT to fully, accurately, and completely answer the user's question
-                 (e.g., summarizing previous reports, follow-up explanations, or questions covered in context).
-                2. If memory context IS SUFFICIENT:
-                - Set needsWebSearch = false.                                                
-                - subQuestions = [original question].
-                3. If fresh external web data, live news, real-time facts, current prices, or code libraries not in memory are required:
-                - Set needsWebSearch = true.
-                - Break the query into 3 to 5 targeted web search sub-questions.
-                `,
-        output: "object"
+List the exact files affected, reasons, risk level, assumptions, and unresolved questions.`,
     });
     return response.object;
 };

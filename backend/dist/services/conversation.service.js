@@ -1,12 +1,11 @@
 import { db } from '../db/index.js';
-import { conversations, reports } from '../db/schema.js';
+import { conversations, agentRuns } from '../db/schema.js';
 import { eq, desc, asc } from 'drizzle-orm';
-export const GUEST_COOKIE_NAME = 'scout_temp_id';
+export const GUEST_COOKIE_NAME = 'codeatlas_visitor_id';
 export const createConversation = async (guestTempId, firstQuestion) => {
     const title = firstQuestion.length > 80 ? firstQuestion.slice(0, 77) + '...' : firstQuestion;
     try {
         const [convo] = await db.insert(conversations).values({
-            userId: null,
             anonymousVisitorId: guestTempId,
             title,
         }).returning();
@@ -14,9 +13,6 @@ export const createConversation = async (guestTempId, firstQuestion) => {
     }
     catch (error) {
         console.error("CREATE CONVERSATION ERROR:", error);
-        if (error instanceof Error && "cause" in error) {
-            console.error("CAUSE:", error.cause);
-        }
         throw error;
     }
 };
@@ -32,11 +28,11 @@ export const getConversationById = async (id, guestTempId) => {
         return null;
     return convo || null;
 };
-export const getConversationReports = async (conversationId) => {
+export const getConversationAgentRuns = async (conversationId) => {
     return db.select()
-        .from(reports)
-        .where(eq(reports.conversationId, conversationId))
-        .orderBy(asc(reports.createdAt));
+        .from(agentRuns)
+        .where(eq(agentRuns.conversationId, conversationId))
+        .orderBy(asc(agentRuns.createdAt));
 };
 export const deleteConversation = async (conversationId, guestTempId) => {
     try {
@@ -47,10 +43,7 @@ export const deleteConversation = async (conversationId, guestTempId) => {
         return deleted;
     }
     catch (error) {
-        console.error("delete CONVERSATION ERROR:", error);
-        if (error instanceof Error && "cause" in error) {
-            console.error("CAUSE:", error.cause);
-        }
+        console.error("DELETE CONVERSATION ERROR:", error);
         throw error;
     }
 };
