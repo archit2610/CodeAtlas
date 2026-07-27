@@ -8,7 +8,8 @@ import {
     importDemo,
     searchRepository,
     getBlastRadius,
-    getRouteMap
+    getRouteMap,
+    getRepositoryGraphHandler
 } from '../controllers/repository.controller.js';
 
 const router = Router();
@@ -20,6 +21,7 @@ router.get('/:id/tree', guestSessionMiddleware, getRepositoryTree);
 router.get('/:id/search', guestSessionMiddleware, searchRepository);
 router.get('/:id/impact', guestSessionMiddleware, getBlastRadius);
 router.get('/:id/routes', guestSessionMiddleware, getRouteMap);
+router.get('/:id/graph', guestSessionMiddleware, getRepositoryGraphHandler);
 router.get('/:id/files/*', guestSessionMiddleware, getRepositoryFile);
 
 export default router;

@@ -213,4 +213,22 @@ export const searchFiles = (id: string, query: string) =>
         language: repositoryFiles.language,
         classification: repositoryFiles.classification,
         lineCount: repositoryFiles.lineCount
-    }).from(repositoryFiles).where(and(eq(repositoryFiles.repositoryId, id), ilike(repositoryFiles.content, `%${query.slice(0, 100)}%`))).limit(20);
+    }).from(repositoryFiles).where(and(eq(repositories.id, id), ilike(repositoryFiles.content, `%${query.slice(0, 100)}%`))).limit(20);
+
+export const getGraphData = async (id: string) => {
+    const nodes = await db.select({
+        id: repositoryFiles.path,
+        label: repositoryFiles.path,
+        classification: repositoryFiles.classification,
+        lineCount: repositoryFiles.lineCount
+    }).from(repositoryFiles).where(eq(repositoryFiles.repositoryId, id));
+
+    const edges = await db.select({
+        source: repositoryEdges.fromPath,
+        target: repositoryEdges.toPath,
+        sourceLine: repositoryEdges.sourceLine,
+        edgeType: repositoryEdges.edgeType
+    }).from(repositoryEdges).where(eq(repositoryEdges.repositoryId, id));
+
+    return { nodes, edges };
+};

@@ -1,256 +1,432 @@
-import { useState, useEffect, useRef, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
-import Navbar from '../components/Navbar';
-import ConversationSidebar from '../components/ConversationSidebar';
-import { api } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useEffect, useRef } from 'react';
+import { Navbar } from '../components/Navbar';
+import { SnapshotCards } from '../components/SnapshotCards';
+import { FileTree } from '../components/FileTree';
+import { SourceViewer } from '../components/SourceViewer';
+import { AgentPanel } from '../components/AgentPanel';
+import { Footer } from '../components/Footer';
+import { RouteInspectorModal } from '../components/RouteInspectorModal';
+import { ImpactInspectorModal } from '../components/ImpactInspectorModal';
+import { FileOverviewModal } from '../components/FileOverviewModal';
+import { SymbolRegistryModal } from '../components/SymbolRegistryModal';
+import { DependencyEdgesModal } from '../components/DependencyEdgesModal';
 
-export default function Dashboard() {
-  const navigate = useNavigate();
-  const auth = useAuth();
-  const [question, setQuestion] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+import { repositoryApi } from '../lib/repositoryApi';
+import { API_URL } from '../lib/constants';
+import type {
+  Repository,
+  RepositoryFileSummary,
+  RepositoryFileDetail,
+  AgentRun,
+  BlastRadiusResult,
+  RouteInspectionResult
+} from '../types';
 
-  // Video fade refs
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const fadingOutRef = useRef(false);
-  const animationFrameIdRef = useRef<number | null>(null);
-  const [videoOpacity, setVideoOpacity] = useState(0);
+export const Dashboard: React.FC = () => {
+  const [repository, setRepository] = useState<Repository | null>(null);
+  const [fileSummaries, setFileSummaries] = useState<RepositoryFileSummary[]>([]);
+  const [activeFile, setActiveFile] = useState<RepositoryFileDetail | null>(null);
+  const [highlightRange, setHighlightRange] = useState<{ start: number; end: number } | null>(null);
 
-  // Load and Loop Fade animations
-  const animateOpacity = (target: number, duration: number, onComplete?: () => void) => {
-    if (animationFrameIdRef.current) {
-      cancelAnimationFrame(animationFrameIdRef.current);
-    }
+  const [currentRun, setCurrentRun] = useState<AgentRun | null>(null);
+  const [streamingStage, setStreamingStage] = useState<string | null>(null);
+  const [streamingIntent, setStreamingIntent] = useState<string | null>(null);
+  const [streamingAnswer, setStreamingAnswer] = useState<string>('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{ message: string; countdownSeconds: number } | null>(null);
 
-    const startOpacity = videoOpacity;
-    const startTime = performance.now();
+  const [activePatchText, setActivePatchText] = useState<string | null>(null);
+  const [activeReviewMd, setActiveReviewMd] = useState<string | null>(null);
 
-    const step = (time: number) => {
-      const elapsed = time - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const currentOpacity = startOpacity + (target - startOpacity) * progress;
+  // Modals for all 4 interactive stat cards
+  const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
+  const [isSymbolsModalOpen, setIsSymbolsModalOpen] = useState(false);
+  const [isEdgesModalOpen, setIsEdgesModalOpen] = useState(false);
 
-      setVideoOpacity(currentOpacity);
+  const [routeMap, setRouteMap] = useState<RouteInspectionResult | null>(null);
+  const [isRouteModalOpen, setIsRouteModalOpen] = useState(false);
 
-      if (progress < 1) {
-        animationFrameIdRef.current = requestAnimationFrame(step);
-      } else {
-        if (onComplete) onComplete();
+  const [impactResult, setImpactResult] = useState<BlastRadiusResult | null>(null);
+  const [isImpactModalOpen, setIsImpactModalOpen] = useState(false);
+
+  // Resizable Panel Widths
+  const [leftWidth, setLeftWidth] = useState(360);
+  const [rightWidth, setRightWidth] = useState(440);
+  const isDraggingLeft = useRef(false);
+  const isDraggingRight = useRef(false);
+
+  // Load persistent active repository and visitor session on mount
+  useEffect(() => {
+    restoreVisitorSession();
+  }, []);
+
+  // Handle panel resizing via mouse drag
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingLeft.current) {
+        const newWidth = Math.min(Math.max(240, e.clientX), 550);
+        setLeftWidth(newWidth);
+      } else if (isDraggingRight.current) {
+        const newWidth = Math.min(Math.max(280, window.innerWidth - e.clientX), 700);
+        setRightWidth(newWidth);
       }
     };
 
-    animationFrameIdRef.current = requestAnimationFrame(step);
-  };
+    const handleMouseUp = () => {
+      isDraggingLeft.current = false;
+      isDraggingRight.current = false;
+      document.body.style.cursor = 'default';
+    };
 
-  const fadeIn = (duration = 500) => {
-    animateOpacity(1, duration);
-  };
-
-  const fadeOut = (duration = 500) => {
-    fadingOutRef.current = true;
-    animateOpacity(0, duration);
-  };
-
-  // Video event handlers
-  const handlePlay = () => {
-    fadeIn(500);
-  };
-
-  const handleTimeUpdate = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (video.duration && video.duration - video.currentTime <= 0.55 && !fadingOutRef.current) {
-      fadeOut(500);
-    }
-  };
-
-  const handleEnded = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    setVideoOpacity(0);
-
-    setTimeout(() => {
-      if (video) {
-        video.currentTime = 0;
-        video.play().catch(() => { });
-        fadingOutRef.current = false;
-        fadeIn(500);
-      }
-    }, 100);
-  };
-
-  // Clean up animation frames
-  useEffect(() => {
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
     return () => {
-      if (animationFrameIdRef.current) {
-        cancelAnimationFrame(animationFrameIdRef.current);
-      }
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (question.trim().length < 10 || isSubmitting) return;
-
-    // Check if user is logged in
-    if (!auth.user) {
-      navigate(`/report/anonymous?question=${encodeURIComponent(question.trim())}`);
-      return;
-    }
-
-    setIsSubmitting(true);
+  const restoreVisitorSession = async () => {
     try {
-      const res = await api.post<{ report?: { id: string; token?: string }; conversationId?: string; reportId?: string; token?: string }>('/api/v1/auth/create', {
-        question: question.trim(),
+      setIsImporting(true);
+      const savedRepoId = localStorage.getItem('codeatlas_active_repo_id');
+
+      if (savedRepoId) {
+        try {
+          const savedRepo = await repositoryApi.getRepository(savedRepoId);
+          if (savedRepo && savedRepo.status === 'ready') {
+            setRepository(savedRepo);
+            await loadTree(savedRepo.id);
+
+            const convos = await repositoryApi.getConversations();
+            if (convos && convos.length > 0) {
+              const latestConvo = convos[0];
+              const runs = await repositoryApi.getConversationRuns(latestConvo.id);
+              if (runs && runs.length > 0) {
+                const latestRun = runs[runs.length - 1];
+                if (latestRun.repositoryId === savedRepo.id) {
+                  setCurrentRun(latestRun);
+                  if (latestRun.patchText) setActivePatchText(latestRun.patchText);
+                  if (latestRun.reviewMd) setActiveReviewMd(latestRun.reviewMd);
+                }
+              }
+            }
+            return;
+          }
+        } catch (e) {
+          console.warn('Could not restore saved repo from localStorage:', e);
+        }
+      }
+
+      await loadDemoRepository();
+    } catch (error) {
+      console.warn('Could not restore visitor session, loading demo repo:', error);
+      await loadDemoRepository();
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const loadDemoRepository = async () => {
+    try {
+      setIsImporting(true);
+      const repo = await repositoryApi.importDemo();
+      setRepository(repo);
+      localStorage.setItem('codeatlas_active_repo_id', repo.id);
+      await loadTree(repo.id);
+    } catch (error) {
+      console.error('Failed to load demo repository:', error);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const loadGithubRepository = async (url: string) => {
+    try {
+      setIsImporting(true);
+      const repo = await repositoryApi.importGithub(url);
+      setRepository(repo);
+      localStorage.setItem('codeatlas_active_repo_id', repo.id);
+      setCurrentRun(null);
+      setStreamingAnswer('');
+      setActivePatchText(null);
+      setActiveReviewMd(null);
+      await loadTree(repo.id);
+    } catch (error) {
+      alert(`Import error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const loadTree = async (repoId: string) => {
+    const files = await repositoryApi.getTree(repoId);
+    setFileSummaries(files);
+
+    const entryFile = files.find(f => f.classification === 'controller' || f.classification === 'route') || files[0];
+    if (entryFile) {
+      selectFile(repoId, entryFile.path);
+    }
+  };
+
+  const selectFile = async (repoId: string, filePath: string, startLine?: number, endLine?: number) => {
+    try {
+      const fileData = await repositoryApi.getFile(repoId, filePath);
+      setActiveFile(fileData);
+
+      if (startLine && endLine) {
+        setHighlightRange({ start: startLine, end: endLine });
+        setTimeout(() => {
+          const el = document.getElementById(`line-${startLine}`);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      } else {
+        setHighlightRange(null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch file content:', error);
+    }
+  };
+
+  const handleOpenRoutes = async () => {
+    if (!repository) return;
+    try {
+      const mapData = await repositoryApi.getRoutes(repository.id);
+      setRouteMap(mapData);
+      setIsRouteModalOpen(true);
+    } catch (error) {
+      console.error('Failed to inspect routes:', error);
+    }
+  };
+
+  const handleInspectImpact = async (filePath: string) => {
+    if (!repository) return;
+    try {
+      const impactData = await repositoryApi.getImpact(repository.id, filePath);
+      setImpactResult(impactData);
+      setIsImpactModalOpen(true);
+    } catch (error) {
+      console.error('Failed to calculate impact:', error);
+    }
+  };
+
+  const handleRunAgent = async (requestText: string) => {
+    if (!repository) return;
+
+    setIsStreaming(true);
+    setStreamingStage('Initiating CodeAtlas request...');
+    setStreamingAnswer('');
+    setRateLimitInfo(null);
+    setActivePatchText(null);
+    setActiveReviewMd(null);
+
+    try {
+      const response = await fetch(`${API_URL}/repositories/${repository.id}/agent-runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({ request: requestText }),
+        credentials: 'include'
       });
 
-      if (res.success && res.data) {
-        const convoId = res.data.conversationId;
-        const reportToken = res.data.report?.id || res.data.report?.token || res.data.token || res.data.reportId;
-        if (convoId) {
-          navigate(`/c/${convoId}`);
-        } else if (reportToken) {
-          navigate(`/report/${reportToken}`);
-        } else {
-          alert('Failed to retrieve report token.');
-        }
-      } else {
-        alert(res.message || 'Failed to start research.');
+      if (!response.ok) {
+        throw new Error(`Server returned HTTP ${response.status}`);
       }
-    } catch {
-      alert('Error initiating research. Please check connection.');
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      if (!reader) return;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+
+              if (event.type === 'stage') {
+                setStreamingStage(event.label);
+              } else if (event.type === 'intent') {
+                setStreamingIntent(event.intent);
+              } else if (event.type === 'token') {
+                setStreamingAnswer(prev => prev + (event.token || event.data || ''));
+              } else if (event.type === 'plan') {
+                setCurrentRun(prev => prev ? { ...prev, planJson: event.plan, status: 'planning' } : null);
+              } else if (event.type === 'complete') {
+                setCurrentRun(event.result);
+              } else if (event.type === 'error') {
+                if (event.errorType === 'RATE_LIMIT_EXCEEDED' || event.errorType === 'QUOTA_EXHAUSTED') {
+                  setRateLimitInfo({
+                    message: event.message || 'Gemini API limit reached',
+                    countdownSeconds: event.retryAfterSeconds || 15
+                  });
+                }
+              }
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Agent run SSE error:', error);
     } finally {
-      setIsSubmitting(false);
+      setIsStreaming(false);
+      setStreamingStage(null);
     }
   };
 
-  // Scroll listener for footer reveal
-  const [showFooter, setShowFooter] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const docHeight = document.documentElement.scrollHeight;
-      const windowHeight = window.innerHeight;
-      const scrollPos = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
-
-      // When scrolled near the bottom, slide the footer up
-      if (docHeight - (scrollPos + windowHeight) <= 60) {
-        setShowFooter(true);
-      } else {
-        setShowFooter(false);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    // Run once on mount to check initial scroll position
-    handleScroll();
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
+  const handleApprovePlan = async (runId: string) => {
+    try {
+      setIsApproving(true);
+      const patchData = await repositoryApi.approveRun(runId);
+      setActivePatchText(patchData.patchText);
+      setActiveReviewMd(patchData.reviewMd);
+      setCurrentRun(prev => prev ? { ...prev, status: 'completed', patchText: patchData.patchText, reviewMd: patchData.reviewMd } : null);
+    } catch (error) {
+      alert(`Approval error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsApproving(false);
+    }
+  };
 
   return (
-    <div className="min-h-[140vh] bg-black overflow-x-hidden flex flex-col relative pb-20">
-      {/* Background Video Container - FIXED to cover the entire page on scroll */}
-      <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
-        <video
-          ref={videoRef}
-          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_115001_bcdaa3b4-03de-47e7-ad63-ae3e392c32d4.mp4"
-          className="absolute inset-0 w-full h-full object-cover translate-y-[17%] transition-none"
-          style={{ opacity: videoOpacity }}
-          muted
-          autoPlay
-          playsInline
-          onPlay={handlePlay}
-          onTimeUpdate={handleTimeUpdate}
-          onEnded={handleEnded}
-        />
-        {/* Soft overlay vignette */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/80" />
-      </div>
-
-      {/* Conversation Sidebar */}
-      <ConversationSidebar
-        isOpenMobile={isSidebarOpen}
-        onCloseMobile={() => setIsSidebarOpen(false)}
+    <div className="h-screen w-screen flex flex-col bg-[#12151A] text-[#E4E1D6] overflow-hidden select-none">
+      {/* Navigation Top Bar */}
+      <Navbar
+        activeRepository={repository}
+        onImportDemo={loadDemoRepository}
+        onImportGithub={loadGithubRepository}
+        isImporting={isImporting}
       />
 
-      {/* Main Content Area */}
-      <div className="relative z-10 flex-1 flex flex-col">
-        <Navbar onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+      {/* Main Explorer 3-Panel Resizable Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Panel: Explorer & Snapshot */}
+        <div style={{ width: `${leftWidth}px` }} className="flex flex-col shrink-0 overflow-hidden">
+          {repository?.snapshotJson && (
+            <SnapshotCards
+              snapshot={repository.snapshotJson}
+              onSelectPrompt={handleRunAgent}
+              onOpenFilesModal={() => setIsFilesModalOpen(true)}
+              onOpenSymbolsModal={() => setIsSymbolsModalOpen(true)}
+              onOpenRoutesModal={handleOpenRoutes}
+              onOpenEdgesModal={() => setIsEdgesModalOpen(true)}
+            />
+          )}
 
-        {/* Hero Area */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center -translate-y-[5%] max-w-4xl mx-auto w-full">
-          <h1
-            className="text-4xl md:text-5xl lg:text-6xl text-white mb-8 tracking-tight whitespace-normal md:whitespace-nowrap"
-            style={{ fontFamily: "'Instrument Serif', serif" }}
-          >
-            What do you want to research?
-          </h1>
+          <div className="flex-1 overflow-hidden">
+            <FileTree
+              files={fileSummaries}
+              activeFilePath={activeFile?.path || null}
+              onSelectFile={(path) => repository && selectFile(repository.id, path)}
+              onInspectImpact={handleInspectImpact}
+            />
+          </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className="liquid-glass rounded-2xl p-2 w-full max-w-2xl transition-all duration-300 focus-within:bg-white/[0.03]">
-            <div className="flex items-start gap-3">
-              <textarea
-                placeholder="Describe your research query in detail..."
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                rows={3}
-                className="bg-transparent border-none outline-none text-white placeholder:text-white/40 text-base w-full resize-none p-4 font-sans focus:ring-0"
-              />
-              <button
-                type="submit"
-                disabled={question.trim().length < 10 || isSubmitting}
-                className="bg-white rounded-xl p-3 text-black hover:bg-white/90 transition-colors flex-shrink-0 mt-1 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? (
-                  <span className="spinner spinner-dark block" />
-                ) : (
-                  <ArrowRight size={20} />
-                )}
-              </button>
-            </div>
-          </form>
+        {/* Resizable Handle 1 (Left <-> Center) */}
+        <div
+          onMouseDown={() => {
+            isDraggingLeft.current = true;
+            document.body.style.cursor = 'col-resize';
+          }}
+          className="w-1.5 hover:w-2 bg-[#181C22] hover:bg-[#38BDF8] cursor-col-resize shrink-0 transition-all z-20 group flex items-center justify-center"
+          title="Drag to resize panel"
+        >
+          <div className="w-0.5 h-8 bg-[#262B33] group-hover:bg-[#38BDF8] rounded-full transition-colors"></div>
+        </div>
 
-          <p className="text-white/30 text-xs mt-3 px-4 max-w-lg">
-            Scout will analyze your request, formulate sub-questions, crawl the web, evaluate sources, and compile a cited report in real-time.
-          </p>
+        {/* Center Panel: Source Viewer & Diff Viewer */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <SourceViewer
+            file={activeFile}
+            highlightRange={highlightRange}
+            activePatchText={activePatchText}
+            activeReviewMd={activeReviewMd}
+            activeRunId={currentRun?.id || null}
+            onInspectImpact={handleInspectImpact}
+          />
+        </div>
+
+        {/* Resizable Handle 2 (Center <-> Right) */}
+        <div
+          onMouseDown={() => {
+            isDraggingRight.current = true;
+            document.body.style.cursor = 'col-resize';
+          }}
+          className="w-1.5 hover:w-2 bg-[#181C22] hover:bg-[#38BDF8] cursor-col-resize shrink-0 transition-all z-20 group flex items-center justify-center"
+          title="Drag to resize panel"
+        >
+          <div className="w-0.5 h-8 bg-[#262B33] group-hover:bg-[#38BDF8] rounded-full transition-colors"></div>
+        </div>
+
+        {/* Right Panel: CodeAtlas Assistant & Activity Stream */}
+        <div style={{ width: `${rightWidth}px` }} className="flex flex-col shrink-0 overflow-hidden">
+          <AgentPanel
+            currentRun={currentRun}
+            streamingStage={streamingStage}
+            streamingIntent={streamingIntent}
+            streamingAnswer={streamingAnswer}
+            isStreaming={isStreaming}
+            rateLimitInfo={rateLimitInfo}
+            onSubmitRequest={handleRunAgent}
+            onApprovePlan={handleApprovePlan}
+            onSelectCitation={(path, start, end) => repository && selectFile(repository.id, path, start, end)}
+            isApproving={isApproving}
+          />
         </div>
       </div>
 
-      {/* Spacer to create scroll height to reveal the footer */}
-      <div className="h-[20vh] relative z-10 pointer-events-none" />
+      {/* Sleek Footer */}
+      <Footer
+        totalFiles={fileSummaries.length}
+        extractedSymbols={repository?.snapshotJson?.symbolCount ?? 0}
+      />
 
-      {/* Sliding Reveal Footer */}
-      <footer
-        className={`fixed bottom-0 left-0 right-0 z-20 py-4 px-8 border-t border-white/5 bg-black/60 backdrop-blur-md transition-all duration-500 ease-in-out flex flex-col sm:flex-row items-center justify-between gap-4 ${showFooter ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none'
-          }`}
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-white/50 text-xs">© 2026 Scout Inc. All rights reserved.</span>
-        </div>
-        {/* <div className="flex items-center gap-6">
-          <a href="#" className="text-white/40 hover:text-white transition-colors text-xs">Features</a>
-          <a href="#" className="text-white/40 hover:text-white transition-colors text-xs">Pricing</a>
-          <a href="#" className="text-white/40 hover:text-white transition-colors text-xs">Privacy</a>
-        </div> */}
-        <div className="flex items-center gap-4">
-          <a href="https://x.com/ArchitSa" aria-label="Twitter" className="liquid-glass rounded-full p-2 text-white/60 hover:text-white hover:bg-white/5 transition-all">
-            <span className="text-xs font-semibold px-1">Twitter</span>
-          </a>
-          <a href="https://github.com/archit2610/Scout" aria-label="GitHub" className="liquid-glass rounded-full p-2 text-white/60 hover:text-white hover:bg-white/5 transition-all">
-            <span className="text-xs font-semibold px-1">GitHub</span>
-          </a>
-          <a href="https://www.linkedin.com/in/archit-sarawagi-6b73872bb/" aria-label="LinkedIn" className="liquid-glass rounded-full p-2 text-white/60 hover:text-white hover:bg-white/5 transition-all">
-            <span className="text-xs font-semibold px-1">LinkedIn</span>
-          </a>
-        </div>
-      </footer>
+      {/* ALL 4 STAT CARD INTERACTIVE MODALS */}
+      <FileOverviewModal
+        snapshot={repository?.snapshotJson || null}
+        isOpen={isFilesModalOpen}
+        onClose={() => setIsFilesModalOpen(false)}
+      />
+
+      <SymbolRegistryModal
+        snapshot={repository?.snapshotJson || null}
+        isOpen={isSymbolsModalOpen}
+        onClose={() => setIsSymbolsModalOpen(false)}
+      />
+
+      <RouteInspectorModal
+        routeMap={routeMap}
+        isOpen={isRouteModalOpen}
+        onClose={() => setIsRouteModalOpen(false)}
+        onSelectRoute={(path, line) => repository && selectFile(repository.id, path, line, line)}
+      />
+
+      <DependencyEdgesModal
+        repositoryId={repository?.id || null}
+        snapshot={repository?.snapshotJson || null}
+        isOpen={isEdgesModalOpen}
+        onClose={() => setIsEdgesModalOpen(false)}
+        onSelectFile={(path) => repository && selectFile(repository.id, path)}
+      />
+
+      <ImpactInspectorModal
+        impact={impactResult}
+        isOpen={isImpactModalOpen}
+        onClose={() => setIsImpactModalOpen(false)}
+        onSelectFile={(path) => repository && selectFile(repository.id, path)}
+      />
     </div>
   );
-}
+};

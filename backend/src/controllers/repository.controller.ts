@@ -8,7 +8,8 @@ import {
     getTree,
     importPublicRepository,
     importDemoRepository,
-    searchFiles
+    searchFiles,
+    getGraphData
 } from '../services/repository.service.js';
 import { calculateBlastRadius } from '../services/impact-analysis.service.js';
 import { inspectRepositoryRoutes } from '../services/route-inspector.service.js';
@@ -72,4 +73,10 @@ export const getRouteMap = asyncHandler(async (req: Request, res: Response) => {
     await getOwnedRepository(req);
     const routeMap = await inspectRepositoryRoutes(req.params.id as string);
     res.json(new ApiResponse(200, { routeMap }, 'API Route map inspected'));
+});
+
+export const getRepositoryGraphHandler = asyncHandler(async (req: Request, res: Response) => {
+    await getOwnedRepository(req);
+    const graph = await getGraphData(req.params.id as string);
+    res.json(new ApiResponse(200, { graph }, 'Graph data fetched'));
 });

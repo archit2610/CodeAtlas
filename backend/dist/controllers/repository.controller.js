@@ -2,6 +2,8 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { ApiError } from '../utils/api-error.js';
 import { ApiResponse } from '../utils/api-response.js';
 import { getFile, getRepository, getTree, importPublicRepository, importDemoRepository, searchFiles } from '../services/repository.service.js';
+import { calculateBlastRadius } from '../services/impact-analysis.service.js';
+import { inspectRepositoryRoutes } from '../services/route-inspector.service.js';
 const getOwnedRepository = async (req) => {
     const visitorId = req.guestTempId;
     const repoId = req.params.id;
@@ -44,5 +46,18 @@ export const searchRepository = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Search query is required');
     const files = await searchFiles(req.params.id, q);
     res.json(new ApiResponse(200, { files }, 'Search complete'));
+});
+export const getBlastRadius = asyncHandler(async (req, res) => {
+    await getOwnedRepository(req);
+    const file = String(req.query.file ?? '').trim();
+    if (!file)
+        throw new ApiError(400, 'Query parameter "file" is required (e.g. ?file=src/services/auth.service.ts)');
+    const impact = await calculateBlastRadius(req.params.id, file);
+    res.json(new ApiResponse(200, { impact }, 'Blast radius calculated'));
+});
+export const getRouteMap = asyncHandler(async (req, res) => {
+    await getOwnedRepository(req);
+    const routeMap = await inspectRepositoryRoutes(req.params.id);
+    res.json(new ApiResponse(200, { routeMap }, 'API Route map inspected'));
 });
 //# sourceMappingURL=repository.controller.js.map

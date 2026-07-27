@@ -8,6 +8,7 @@ interface AgentRunOptions {
 }
 export declare const runRepositoryAgent: ({ repositoryId, visitorId, conversationId, request, emit }: AgentRunOptions) => Promise<{
     runId: string;
+    conversationId: string | undefined;
     intent: "change_request";
     plan: {
         summary: string;
@@ -31,6 +32,7 @@ export declare const runRepositoryAgent: ({ repositoryId, visitorId, conversatio
     answerMd?: never;
 } | {
     runId: string;
+    conversationId: string | undefined;
     intent: "explain" | "trace" | "debug" | "impact";
     answerMd: string;
     evidence: {
