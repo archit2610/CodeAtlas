@@ -4,6 +4,7 @@ import { ApiError } from '../utils/api-error.js';
 import { ApiResponse } from '../utils/api-response.js';
 import { runRepositoryAgent } from '../services/repository-agent.service.js';
 import { approveChangePlan, generatePatchForRun, getPatchForRun } from '../services/patch.service.js';
+import { parseLlmError } from '../utils/llm-error.js';
 import { db } from '../db/index.js';
 import { agentRuns } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
@@ -49,21 +50,31 @@ export const createAgentRun = asyncHandler(async (req: Request, res: Response) =
             emit({ type: 'complete', result });
             res.end();
         } catch (error) {
-            emit({ type: 'error', message: error instanceof Error ? error.message : 'Agent run failed' });
+            const structuredErr = parseLlmError(error);
+            emit({
+                type: 'error',
+                errorType: structuredErr.errorType,
+                message: structuredErr.userFriendlyHint,
+                retryAfterSeconds: structuredErr.retryAfterSeconds
+            });
             res.end();
         }
         return;
     }
 
-    const result = await runRepositoryAgent({
-        repositoryId,
-        visitorId,
-        conversationId,
-        request,
-        emit: () => { }
-    });
-
-    res.status(201).json(new ApiResponse(201, result, 'Agent run initiated'));
+    try {
+        const result = await runRepositoryAgent({
+            repositoryId,
+            visitorId,
+            conversationId,
+            request,
+            emit: () => { }
+        });
+        res.status(201).json(new ApiResponse(201, result, 'Agent run initiated'));
+    } catch (error) {
+        const structuredErr = parseLlmError(error);
+        throw new ApiError(structuredErr.statusCode, structuredErr.userFriendlyHint);
+    }
 });
 
 export const getAgentRunEvents = asyncHandler(async (req: Request, res: Response) => {
@@ -118,7 +129,13 @@ export const getAgentRunEvents = asyncHandler(async (req: Request, res: Response
         emit({ type: 'complete', result });
         res.end();
     } catch (error) {
-        emit({ type: 'error', message: error instanceof Error ? error.message : 'Agent run failed' });
+        const structuredErr = parseLlmError(error);
+        emit({
+            type: 'error',
+            errorType: structuredErr.errorType,
+            message: structuredErr.userFriendlyHint,
+            retryAfterSeconds: structuredErr.retryAfterSeconds
+        });
         res.end();
     }
 });
@@ -127,10 +144,14 @@ export const approveRun = asyncHandler(async (req: Request, res: Response) => {
     const runId = req.params.id as string;
     const visitorId = req.guestTempId!;
 
-    await approveChangePlan(runId, visitorId);
-    const patchResult = await generatePatchForRun(runId, visitorId);
-
-    res.json(new ApiResponse(200, patchResult, 'Plan approved and patch generated'));
+    try {
+        await approveChangePlan(runId, visitorId);
+        const patchResult = await generatePatchForRun(runId, visitorId);
+        res.json(new ApiResponse(200, patchResult, 'Plan approved and patch generated'));
+    } catch (error) {
+        const structuredErr = parseLlmError(error);
+        throw new ApiError(structuredErr.statusCode, structuredErr.userFriendlyHint);
+    }
 });
 
 export const getPatch = asyncHandler(async (req: Request, res: Response) => {
