@@ -103,26 +103,33 @@ export const Dashboard: React.FC = () => {
         try {
           const savedRepo = await repositoryApi.getRepository(savedRepoId);
           if (savedRepo && savedRepo.status === 'ready') {
-            setRepository(savedRepo);
-            await loadTree(savedRepo.id);
+            const files = await repositoryApi.getTree(savedRepo.id);
+            if (files && files.length > 0) {
+              setRepository(savedRepo);
+              setFileSummaries(files);
+              const entryFile = files.find(f => f.classification === 'controller' || f.classification === 'route') || files[0];
+              if (entryFile) {
+                selectFile(savedRepo.id, entryFile.path);
+              }
 
-            const convos = await repositoryApi.getConversations();
-            if (convos && convos.length > 0) {
-              const latestConvo = convos[0];
-              const runs = await repositoryApi.getConversationRuns(latestConvo.id);
-              if (runs && runs.length > 0) {
-                const latestRun = runs[runs.length - 1];
-                if (latestRun.repositoryId === savedRepo.id) {
-                  setCurrentRun(latestRun);
-                  if (latestRun.patchText) setActivePatchText(latestRun.patchText);
-                  if (latestRun.reviewMd) setActiveReviewMd(latestRun.reviewMd);
+              const convos = await repositoryApi.getConversations();
+              if (convos && convos.length > 0) {
+                const latestConvo = convos[0];
+                const runs = await repositoryApi.getConversationRuns(latestConvo.id);
+                if (runs && runs.length > 0) {
+                  const latestRun = runs[runs.length - 1];
+                  if (latestRun.repositoryId === savedRepo.id) {
+                    setCurrentRun(latestRun);
+                    if (latestRun.patchText) setActivePatchText(latestRun.patchText);
+                    if (latestRun.reviewMd) setActiveReviewMd(latestRun.reviewMd);
+                  }
                 }
               }
+              return;
             }
-            return;
           }
         } catch (e) {
-          console.warn('Could not restore saved repo from localStorage:', e);
+          console.warn('Could not restore saved repo from localStorage, resetting:', e);
           localStorage.removeItem('codeatlas_active_repo_id');
         }
       }
