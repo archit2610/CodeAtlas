@@ -59,7 +59,7 @@ export const SnapshotCards: React.FC<SnapshotCardsProps> = ({
   const statCardsRef = React.useRef<HTMLDivElement>(null);
   const questionsRef = React.useRef<HTMLDivElement>(null);
 
-  const scrollContainer = (ref: React.RefObject<HTMLDivElement>, direction: 'left' | 'right') => {
+  const scrollContainer = (ref: React.RefObject<HTMLDivElement | null>, direction: 'left' | 'right') => {
     if (ref.current) {
       const scrollAmount = direction === 'left' ? -220 : 220;
       ref.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
