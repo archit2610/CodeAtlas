@@ -10,6 +10,7 @@ import { ImpactInspectorModal } from '../components/ImpactInspectorModal';
 import { FileOverviewModal } from '../components/FileOverviewModal';
 import { SymbolRegistryModal } from '../components/SymbolRegistryModal';
 import { DependencyEdgesModal } from '../components/DependencyEdgesModal';
+import { EndToEndRouteTracerModal } from '../components/EndToEndRouteTracerModal';
 
 import { repositoryApi } from '../lib/repositoryApi';
 import { API_URL } from '../lib/constants';
@@ -40,13 +41,18 @@ export const Dashboard: React.FC = () => {
   const [activePatchText, setActivePatchText] = useState<string | null>(null);
   const [activeReviewMd, setActiveReviewMd] = useState<string | null>(null);
 
-  // Modals for all 4 interactive stat cards
+  // Modals & Layer Filter tab for all stat cards
   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
+  const [activeClassificationTab, setActiveClassificationTab] = useState<string | null>(null);
   const [isSymbolsModalOpen, setIsSymbolsModalOpen] = useState(false);
   const [isEdgesModalOpen, setIsEdgesModalOpen] = useState(false);
 
   const [routeMap, setRouteMap] = useState<RouteInspectionResult | null>(null);
   const [isRouteModalOpen, setIsRouteModalOpen] = useState(false);
+
+  // End-to-End Route Flow Tracer Modal state
+  const [isRouteTracerOpen, setIsRouteTracerOpen] = useState(false);
+  const [selectedTracePath, setSelectedTracePath] = useState<string | null>(null);
 
   const [impactResult, setImpactResult] = useState<BlastRadiusResult | null>(null);
   const [isImpactModalOpen, setIsImpactModalOpen] = useState(false);
@@ -201,6 +207,23 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const handleTraceRoute = async (routePath: string) => {
+    if (!repository) return;
+    try {
+      const mapData = await repositoryApi.getRoutes(repository.id);
+      setRouteMap(mapData);
+      setSelectedTracePath(routePath);
+      setIsRouteTracerOpen(true);
+    } catch (error) {
+      console.error('Failed to trace route:', error);
+    }
+  };
+
+  const handleOpenClassificationModal = (classification: string) => {
+    setActiveClassificationTab(classification);
+    setIsFilesModalOpen(true);
+  };
+
   const handleInspectImpact = async (filePath: string) => {
     if (!repository) return;
     try {
@@ -316,8 +339,9 @@ export const Dashboard: React.FC = () => {
           {repository?.snapshotJson && (
             <SnapshotCards
               snapshot={repository.snapshotJson}
+              files={fileSummaries}
               onSelectPrompt={handleRunAgent}
-              onOpenFilesModal={() => setIsFilesModalOpen(true)}
+              onOpenClassificationModal={handleOpenClassificationModal}
               onOpenSymbolsModal={() => setIsSymbolsModalOpen(true)}
               onOpenRoutesModal={handleOpenRoutes}
               onOpenEdgesModal={() => setIsEdgesModalOpen(true)}
@@ -393,11 +417,14 @@ export const Dashboard: React.FC = () => {
         extractedSymbols={repository?.snapshotJson?.symbolCount ?? 0}
       />
 
-      {/* ALL 4 STAT CARD INTERACTIVE MODALS */}
+      {/* ALL STAT CARD INTERACTIVE MODALS */}
       <FileOverviewModal
         snapshot={repository?.snapshotJson || null}
+        files={fileSummaries}
         isOpen={isFilesModalOpen}
         onClose={() => setIsFilesModalOpen(false)}
+        initialClassification={activeClassificationTab}
+        onSelectFile={(path) => repository && selectFile(repository.id, path)}
       />
 
       <SymbolRegistryModal
@@ -411,11 +438,22 @@ export const Dashboard: React.FC = () => {
         isOpen={isRouteModalOpen}
         onClose={() => setIsRouteModalOpen(false)}
         onSelectRoute={(path, line) => repository && selectFile(repository.id, path, line, line)}
+        onTraceRoute={handleTraceRoute}
+      />
+
+      <EndToEndRouteTracerModal
+        repositoryId={repository?.id || null}
+        routeMap={routeMap}
+        initialRoutePath={selectedTracePath}
+        isOpen={isRouteTracerOpen}
+        onClose={() => setIsRouteTracerOpen(false)}
+        onSelectCodeLocation={(path, line) => repository && selectFile(repository.id, path, line, line)}
       />
 
       <DependencyEdgesModal
         repositoryId={repository?.id || null}
         snapshot={repository?.snapshotJson || null}
+        files={fileSummaries}
         isOpen={isEdgesModalOpen}
         onClose={() => setIsEdgesModalOpen(false)}
         onSelectFile={(path) => repository && selectFile(repository.id, path)}

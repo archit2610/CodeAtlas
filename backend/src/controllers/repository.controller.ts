@@ -12,7 +12,7 @@ import {
     getGraphData
 } from '../services/repository.service.js';
 import { calculateBlastRadius } from '../services/impact-analysis.service.js';
-import { inspectRepositoryRoutes } from '../services/route-inspector.service.js';
+import { inspectRepositoryRoutes, traceRouteFlow } from '../services/route-inspector.service.js';
 
 const getOwnedRepository = async (req: Request) => {
     const visitorId = req.guestTempId!;
@@ -73,6 +73,13 @@ export const getRouteMap = asyncHandler(async (req: Request, res: Response) => {
     await getOwnedRepository(req);
     const routeMap = await inspectRepositoryRoutes(req.params.id as string);
     res.json(new ApiResponse(200, { routeMap }, 'API Route map inspected'));
+});
+
+export const getRouteTraceHandler = asyncHandler(async (req: Request, res: Response) => {
+    await getOwnedRepository(req);
+    const routePath = String(req.query.path ?? '').trim();
+    const trace = await traceRouteFlow(req.params.id as string, routePath);
+    res.json(new ApiResponse(200, { trace }, 'Route flow trace generated'));
 });
 
 export const getRepositoryGraphHandler = asyncHandler(async (req: Request, res: Response) => {

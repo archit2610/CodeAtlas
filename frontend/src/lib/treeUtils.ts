@@ -8,6 +8,42 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
+export function getFileClassification(filePath: string, rawClassification?: string): string {
+  const l = filePath.toLowerCase();
+
+  // 1. Components: anything in components directory or frontend UI components
+  if (/\/components\//.test(l) || /protectedroute|\.tsx$|\.jsx$|\.vue$|\.svelte$/.test(l)) {
+    return 'component';
+  }
+
+  // 2. Utils & Helpers
+  if (/\/utils\/|\/helpers\/|async-handler/.test(l)) {
+    return 'source';
+  }
+
+  // 3. Controllers
+  if (/\/controllers\//.test(l) || /\.controllers?\./.test(l)) {
+    return 'controller';
+  }
+
+  // 4. Routes
+  if (/\/routes\//.test(l) || /\.routes?\./.test(l) || /\.routers?\./.test(l)) {
+    return 'route';
+  }
+
+  // 5. Services
+  if (/\/services\//.test(l) || /\.service\./.test(l)) {
+    return 'service';
+  }
+
+  // 6. Models & Schemas
+  if (/\/models\/|\/db\/|schema|entity/.test(l)) {
+    return 'model';
+  }
+
+  return rawClassification && rawClassification !== 'source' ? rawClassification : 'source';
+}
+
 export function buildFileTree(files: RepositoryFileSummary[]): TreeNode[] {
   const rootNodes: TreeNode[] = [];
   const nodeMap = new Map<string, TreeNode>();
@@ -29,7 +65,7 @@ export function buildFileTree(files: RepositoryFileSummary[]): TreeNode[] {
           name: part,
           path: currentPath,
           isFolder: !isFile,
-          fileData: isFile ? file : undefined,
+          fileData: isFile ? { ...file, classification: getFileClassification(file.path, file.classification) } : undefined,
           children: []
         };
         nodeMap.set(currentPath, newNode);

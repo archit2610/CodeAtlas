@@ -7,7 +7,8 @@ import type {
   AgentRun,
   Conversation,
   BlastRadiusResult,
-  RouteInspectionResult
+  RouteInspectionResult,
+  RouteTraceResult
 } from '../types';
 
 export interface GraphData {
@@ -57,6 +58,12 @@ export const repositoryApi = {
   getRoutes: async (id: string): Promise<RouteInspectionResult> => {
     const res = await api.get<{ routeMap: RouteInspectionResult }>(`/repositories/${id}/routes`);
     return res.data.routeMap;
+  },
+
+  getRouteTrace: async (id: string, routePath: string): Promise<RouteTraceResult> => {
+    const encoded = encodeURIComponent(routePath);
+    const res = await api.get<{ trace: RouteTraceResult }>(`/repositories/${id}/routes/trace?path=${encoded}`);
+    return res.data.trace;
   },
 
   getGraph: async (id: string): Promise<GraphData> => {

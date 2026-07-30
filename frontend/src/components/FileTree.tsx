@@ -12,7 +12,9 @@ import {
   Cpu,
   Route,
   Database,
-  Compass
+  Compass,
+  FolderMinus,
+  FolderPlus
 } from 'lucide-react';
 import type { RepositoryFileSummary } from '../types';
 import { buildFileTree, getParentFolderPaths, type TreeNode } from '../lib/treeUtils';
@@ -61,16 +63,36 @@ export const FileTree: React.FC<FileTreeProps> = ({
     });
   };
 
+  const handleCollapseAll = () => {
+    setExpandedFolders(new Set());
+  };
+
+  const getAllFolderPaths = (nodes: TreeNode[]): string[] => {
+    let paths: string[] = [];
+    for (const node of nodes) {
+      if (node.isFolder) {
+        paths.push(node.path);
+        paths = paths.concat(getAllFolderPaths(node.children));
+      }
+    }
+    return paths;
+  };
+
+  const handleExpandAll = () => {
+    const allPaths = getAllFolderPaths(treeData);
+    setExpandedFolders(new Set(allPaths));
+  };
+
   const getClassificationIcon = (classification: string) => {
     switch (classification) {
       case 'route':
         return <Route className="w-3.5 h-3.5 text-[#4A8B85]" />;
       case 'model':
-        return <Database className="w-3.5 h-3.5 text-[#C79A4B]" />;
+        return <Database className="w-3.5 h-3.5 text-[#7C9473]" />;
       case 'service':
         return <Zap className="w-3.5 h-3.5 text-[#4A8B85]" />;
       case 'controller':
-        return <Cpu className="w-3.5 h-3.5 text-[#C79A4B]" />;
+        return <Cpu className="w-3.5 h-3.5 text-[#38BDF8]" />;
       case 'component':
         return <Layers className="w-3.5 h-3.5 text-[#4A8B85]" />;
       default:
@@ -100,9 +122,9 @@ export const FileTree: React.FC<FileTreeProps> = ({
               <ChevronRight className="w-3.5 h-3.5 text-[#8A8F97] group-hover:text-[#E4E1D6]" />
             )}
             {isExpanded ? (
-              <FolderOpen className="w-4 h-4 text-[#C79A4B]" />
+              <FolderOpen className="w-4 h-4 text-[#38BDF8]" />
             ) : (
-              <Folder className="w-4 h-4 text-[#8A8F97] group-hover:text-[#C79A4B]" />
+              <Folder className="w-4 h-4 text-[#8A8F97] group-hover:text-[#38BDF8]" />
             )}
             <span className="font-medium text-[#E4E1D6]/80 group-hover:text-[#E4E1D6] truncate">
               {node.name}
@@ -128,11 +150,11 @@ export const FileTree: React.FC<FileTreeProps> = ({
 
     return (
       <div key={node.path} className="relative group">
-        {/* Animated Jumper Guide Beam for active selection (Muted Brass Gold) */}
+        {/* Animated Jumper Guide Beam for active selection */}
         {isActive && (
           <motion.div
             layoutId="activeFileBeam"
-            className="absolute inset-0 bg-[#C79A4B]/20 border-l-2 border-[#C79A4B] rounded-r-md pointer-events-none"
+            className="absolute inset-0 bg-[#38BDF8]/20 border-l-2 border-[#38BDF8] rounded-r-md pointer-events-none"
             transition={{ type: 'spring', stiffness: 350, damping: 30 }}
           />
         )}
@@ -142,7 +164,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
           style={{ paddingLeft: `${depth * 14 + 10}px` }}
           className={`w-full flex items-center justify-between py-1.5 px-2 rounded-md text-xs cursor-pointer transition-all ${
             isActive
-              ? 'text-[#E4E1D6] font-bold bg-[#C79A4B]/15'
+              ? 'text-[#E4E1D6] font-bold bg-[#38BDF8]/15'
               : 'text-[#E4E1D6]/70 hover:text-[#E4E1D6] hover:bg-[#1E232B]'
           }`}
         >
@@ -164,7 +186,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
                   onInspectImpact(node.path);
                 }}
                 title="Inspect Blast Radius & Impact"
-                className="opacity-0 group-hover:opacity-100 text-[#8A8F97] hover:text-[#C79A4B] p-0.5 rounded transition-opacity"
+                className="opacity-0 group-hover:opacity-100 text-[#8A8F97] hover:text-[#38BDF8] p-0.5 rounded transition-opacity"
               >
                 <Compass className="w-3.5 h-3.5" />
               </button>
@@ -177,16 +199,34 @@ export const FileTree: React.FC<FileTreeProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-[#181C22] border-r border-[#262B33] text-[#E4E1D6]">
-      {/* Tree Header & Search */}
+      {/* Tree Header with Search & Collapse All / Expand All Action Buttons */}
       <div className="p-3 border-b border-[#262B33] space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-[#C79A4B] flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-[#C79A4B]" />
+          <span className="text-xs font-bold uppercase tracking-wider text-[#38BDF8] flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-[#38BDF8]" />
             Repository Explorer
           </span>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1E232B] text-[#4A8B85] border border-[#262B33]">
-            {files.length} Files
-          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleCollapseAll}
+              className="p-1 rounded bg-[#12151A] hover:bg-[#1E232B] text-[#8A8F97] hover:text-[#38BDF8] transition-colors border border-[#262B33] flex items-center gap-1 text-[10px]"
+              title="Collapse All Folders"
+            >
+              <FolderMinus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Collapse</span>
+            </button>
+            <button
+              onClick={handleExpandAll}
+              className="p-1 rounded bg-[#12151A] hover:bg-[#1E232B] text-[#8A8F97] hover:text-[#38BDF8] transition-colors border border-[#262B33] flex items-center gap-1 text-[10px]"
+              title="Expand All Folders"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Expand</span>
+            </button>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#12151A] text-[#4A8B85] border border-[#262B33]">
+              {files.length} Files
+            </span>
+          </div>
         </div>
 
         <div className="relative">
@@ -196,7 +236,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
             placeholder="Search files..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#12151A] border border-[#262B33] rounded-md pl-8 pr-3 py-1.5 text-xs text-[#E4E1D6] placeholder-[#8A8F97]/60 focus:outline-none focus:border-[#C79A4B] focus:ring-1 focus:ring-[#C79A4B] transition-all"
+            className="w-full bg-[#12151A] border border-[#262B33] rounded-md pl-8 pr-3 py-1.5 text-xs text-[#E4E1D6] placeholder-[#8A8F97]/60 focus:outline-none focus:border-[#38BDF8] focus:ring-1 focus:ring-[#38BDF8] transition-all"
           />
         </div>
       </div>
@@ -210,7 +250,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
                 key={file.path}
                 onClick={() => onSelectFile(file.path)}
                 className={`flex items-center justify-between p-2 rounded-md text-xs cursor-pointer ${
-                  activeFilePath === file.path ? 'bg-[#C79A4B]/20 text-[#E4E1D6] border-l-2 border-[#C79A4B]' : 'hover:bg-[#1E232B] text-[#E4E1D6]/80'
+                  activeFilePath === file.path ? 'bg-[#38BDF8]/20 text-[#E4E1D6] border-l-2 border-[#38BDF8]' : 'hover:bg-[#1E232B] text-[#E4E1D6]/80'
                 }`}
               >
                 <div className="flex items-center gap-2 truncate">

@@ -65,62 +65,10 @@ export interface SourceImport {
 }
 
 export interface RepositoryFileDetail extends RepositoryFileSummary {
-  id: string;
-  repositoryId: string;
   content: string;
   contentHash: string;
-  symbolsJson: SourceSymbol[];
-  importsJson: SourceImport[];
-  createdAt: string;
-}
-
-export interface EvidenceCitation {
-  path: string;
-  startLine: number;
-  endLine: number;
-  claim?: string;
-  confidence?: string;
-}
-
-export interface ChangePlan {
-  summary: string;
-  riskLevel: 'low' | 'medium' | 'high';
-  affectedFiles: Array<{
-    path: string;
-    reason: string;
-    action: 'modify' | 'add' | 'delete';
-  }>;
-  assumptions: string[];
-  unresolvedQuestions: string[];
-}
-
-export interface AgentRun {
-  id: string;
-  repositoryId: string;
-  visitorId: string;
-  conversationId?: string | null;
-  request: string;
-  intent: 'explain' | 'trace' | 'debug' | 'impact' | 'change_request';
-  status: 'pending' | 'running' | 'planning' | 'approved' | 'completed' | 'error';
-  evidenceJson: EvidenceCitation[];
-  planJson?: ChangePlan | null;
-  answerMd?: string | null;
-  patchText?: string | null;
-  reviewMd?: string | null;
-  tokensUsed?: number;
-  costUsd?: number;
-  errorMessage?: string | null;
-  createdAt: string;
-}
-
-export interface BlastRadiusResult {
-  filePath: string;
-  riskLevel: 'low' | 'medium' | 'high';
-  riskScore: number;
-  directDependents: Array<{ fromPath: string; sourceLine: number; edgeType: string }>;
-  transitiveDependents: string[];
-  affectedRoutes: string[];
-  summary: string;
+  symbolsJson?: SourceSymbol[];
+  importsJson?: SourceImport[];
 }
 
 export interface RouteEndpoint {
@@ -135,4 +83,57 @@ export interface RouteInspectionResult {
   totalRoutes: number;
   routeFilesCount: number;
   routes: RouteEndpoint[];
+}
+
+export interface RouteTraceStep {
+  stepIndex: number;
+  layer: 'route' | 'controller' | 'service' | 'model';
+  title: string;
+  filePath: string;
+  line: number;
+  symbolName?: string;
+  codeSnippet: string;
+}
+
+export interface RouteTraceResult {
+  method: string;
+  routePath: string;
+  steps: RouteTraceStep[];
+}
+
+export interface BlastRadiusDependent {
+  fromPath: string;
+  sourceLine: number;
+  edgeType: string;
+}
+
+export interface BlastRadiusResult {
+  filePath: string;
+  riskScore: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  summary: string;
+  directDependents: BlastRadiusDependent[];
+  affectedRoutes: string[];
+}
+
+export interface AgentRunPlan {
+  summary: string;
+  riskLevel: 'low' | 'medium' | 'high';
+  affectedFiles: Array<{ path: string; action: 'modify' | 'create' | 'delete' }>;
+}
+
+export interface AgentRun {
+  id: string;
+  repositoryId: string;
+  conversationId: string;
+  intent: 'explain' | 'trace' | 'debug' | 'impact' | 'change_request';
+  request: string;
+  answerMd?: string;
+  evidenceJson?: Array<{ path: string; startLine: number; endLine: number }>;
+  planJson?: AgentRunPlan;
+  patchText?: string;
+  reviewMd?: string;
+  status: 'routing' | 'planning' | 'executing' | 'completed' | 'failed';
+  createdAt: string;
+  updatedAt: string;
 }

@@ -86,12 +86,13 @@ export const scanFile = (filePath: string, content: string): ScannedFile => {
     }
 
     const l = normalizedPath.toLowerCase();
-    const classification = /controller|handler|route/.test(l) ? 'route'
+    const classification = /controller/.test(l) ? 'controller'
+        : /route|handler/.test(l) ? 'route'
         : /model|schema|entity/.test(l) ? 'model'
-            : /service/.test(l) ? 'service'
-                : /middleware/.test(l) ? 'middleware'
-                    : /component|\.tsx$|\.jsx$|\.vue$|\.svelte$/.test(l) ? 'component'
-                        : 'source';
+        : /service/.test(l) ? 'service'
+        : /middleware/.test(l) ? 'middleware'
+        : /component|\.tsx$|\.jsx$|\.vue$|\.svelte$/.test(l) ? 'component'
+        : 'source';
 
     return {
         path: normalizedPath,
@@ -108,34 +109,50 @@ export const scanFile = (filePath: string, content: string): ScannedFile => {
 export const buildSnapshot = (files: ScannedFile[]): RepositorySnapshot => {
     const languages: Record<string, number> = {};
     const classifications: Record<string, number> = {};
+    let symbolCount = 0;
+    const dependencyEdges: Array<{ fromPath: string; toPath: string; line: number }> = [];
+
+    const routeFiles: string[] = [];
+    const modelFiles: string[] = [];
+    const controllerFiles: string[] = [];
+    const serviceFiles: string[] = [];
+    const componentFiles: string[] = [];
+    const entryPoints: string[] = [];
+
+    const knownPaths = new Set(files.map(f => f.path));
 
     for (const f of files) {
         languages[f.language] = (languages[f.language] ?? 0) + 1;
         classifications[f.classification] = (classifications[f.classification] ?? 0) + 1;
+        symbolCount += f.symbols.length;
+
+        if (f.classification === 'route') routeFiles.push(f.path);
+        if (f.classification === 'controller') controllerFiles.push(f.path);
+        if (f.classification === 'service') serviceFiles.push(f.path);
+        if (f.classification === 'model') modelFiles.push(f.path);
+        if (f.classification === 'component') componentFiles.push(f.path);
+
+        if (f.path.includes('index.') || f.path.includes('app.') || f.path.includes('server.')) {
+            entryPoints.push(f.path);
+        }
+
+        for (const i of f.imports) {
+            if (i.target.startsWith('.')) {
+                const resolved = resolveImportPath(f.path, i.target, knownPaths);
+                dependencyEdges.push({ fromPath: f.path, toPath: resolved, line: i.line });
+            }
+        }
     }
 
-    const by = (p: (f: ScannedFile) => boolean) => files.filter(p).map(f => f.path);
-    const pkg = files.find(f => f.path === 'package.json')?.content.toLowerCase() ?? '';
-
-    const detectedFrameworks = ['next', 'react', 'express', 'vite', 'django', 'flask', 'fastapi', 'nest']
-        .filter(x => pkg.includes(x));
-
-    const entryPoints = by(f => /(^|\/)(index|main|app|server)\.(ts|tsx|js|jsx|py|go|java|cpp|c)$/i.test(f.path)).slice(0, 10);
-    const routeFiles = by(f => f.classification === 'route');
-    const modelFiles = by(f => f.classification === 'model');
-    const controllerFiles = by(f => /controller|handler/.test(f.path.toLowerCase()));
-    const serviceFiles = by(f => f.classification === 'service');
-    const componentFiles = by(f => f.classification === 'component');
-
-    const suggestedPrompts: string[] = [
-        "How does authentication work in this repository?",
-        "Trace the main API request flow from entry point to database.",
-        "Where are the database models and schemas defined?",
-    ];
-
-    const hasCheckout = files.some(f => /checkout|payment|cart|session/i.test(f.path) || /checkout|payment|cart|session/i.test(f.content));
-    if (hasCheckout) {
-        suggestedPrompts.push("Why do users lose their session after checkout?");
+    const frameworks: string[] = [];
+    if (files.some(f => f.path.endsWith('package.json'))) {
+        const pkgContent = files.find(f => f.path.endsWith('package.json'))?.content ?? '';
+        if (pkgContent.includes('express')) frameworks.push('EXPRESS');
+        if (pkgContent.includes('react')) frameworks.push('REACT');
+        if (pkgContent.includes('next')) frameworks.push('NEXT.JS');
+        if (pkgContent.includes('vue')) frameworks.push('VUE');
+        if (pkgContent.includes('drizzle')) frameworks.push('DRIZZLE ORM');
+        if (pkgContent.includes('prisma')) frameworks.push('PRISMA');
     }
 
     return {
@@ -143,15 +160,20 @@ export const buildSnapshot = (files: ScannedFile[]): RepositorySnapshot => {
         textFiles: files.length,
         languages,
         classifications,
-        frameworks: detectedFrameworks,
+        symbolCount,
+        dependencyEdgeCount: dependencyEdges.length,
         entryPoints,
         routeFiles,
-        modelFiles,
         controllerFiles,
         serviceFiles,
+        modelFiles,
         componentFiles,
-        symbolCount: files.reduce((n, f) => n + f.symbols.length, 0),
-        dependencyEdgeCount: files.reduce((n, f) => n + f.imports.length, 0),
-        suggestedPrompts
+        frameworks,
+        suggestedPrompts: [
+            "How does authentication work in this repository?",
+            "Trace the main API request flow from entry point to database.",
+            "Where are the database models and schemas defined?",
+            "Why do users lose their session after checkout?"
+        ]
     };
 };

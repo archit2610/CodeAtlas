@@ -1,5 +1,5 @@
 import React from 'react';
-import { Code2, X, ArrowRight, Zap } from 'lucide-react';
+import { Code2, X, Zap, HelpCircle } from 'lucide-react';
 import type { RepositorySnapshot } from '../types';
 
 interface SymbolRegistryModalProps {
@@ -45,10 +45,20 @@ export const SymbolRegistryModal: React.FC<SymbolRegistryModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-3 bg-[#12151A]">
+        <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4 bg-[#12151A]">
+          {/* Simple 2-3 Line Explanation Box */}
+          <div className="p-4 rounded-xl bg-[#181C22] border border-[#38BDF8]/30 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-[#38BDF8] text-xs">
+              <HelpCircle className="w-4 h-4 text-[#38BDF8]" /> What are "Symbols" in Coding?
+            </div>
+            <p className="text-xs text-[#E4E1D6]/90 leading-relaxed font-sans">
+              In software engineering, <strong>symbols</strong> are named code identifiers—such as functions, classes, interfaces, variable definitions, and API route handlers. CodeAtlas parses your codebase's Abstract Syntax Tree (AST) to index these symbols, enabling instant evidence lookup and precise blast-radius impact analysis.
+            </p>
+          </div>
+
           <div className="p-4 rounded-xl bg-[#181C22] border border-[#262B33] text-xs text-[#E4E1D6] space-y-2">
-            <div className="flex items-center gap-2 font-bold text-[#38BDF8]">
-              <Zap className="w-4 h-4 text-[#38BDF8]" /> Static AST Analysis Complete
+            <div className="flex items-center gap-2 font-bold text-[#4A8B85]">
+              <Zap className="w-4 h-4 text-[#4A8B85]" /> Static AST Analysis Summary
             </div>
             <p className="text-[#8A8F97] leading-relaxed">
               CodeAtlas extracted <strong>{snapshot.symbolCount}</strong> symbols across <strong>{snapshot.totalFiles}</strong> source files. Every symbol is indexed in local database tables for instant evidence lookup.

@@ -9,6 +9,7 @@ import {
     searchRepository,
     getBlastRadius,
     getRouteMap,
+    getRouteTraceHandler,
     getRepositoryGraphHandler
 } from '../controllers/repository.controller.js';
 
@@ -21,6 +22,7 @@ router.get('/:id/tree', guestSessionMiddleware, getRepositoryTree);
 router.get('/:id/search', guestSessionMiddleware, searchRepository);
 router.get('/:id/impact', guestSessionMiddleware, getBlastRadius);
 router.get('/:id/routes', guestSessionMiddleware, getRouteMap);
+router.get('/:id/routes/trace', guestSessionMiddleware, getRouteTraceHandler);
 router.get('/:id/graph', guestSessionMiddleware, getRepositoryGraphHandler);
 router.get('/:id/files/*', guestSessionMiddleware, getRepositoryFile);
 
