@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, ExternalLink } from 'lucide-react';
+import { Terminal } from 'lucide-react';
 
 interface FooterProps {
   totalFiles: number;
