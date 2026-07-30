@@ -1,11 +1,11 @@
 {
-  "name": "megaproject",
+  "name": "codeatlas-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"import('fs').then(fs => fs.cpSync('src/fixtures', 'dist/fixtures', { recursive: true, force: true }))\"",
     "start": "node dist/index.js"
   },
   "keywords": [],
@@ -39,19 +39,17 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^3.0.0",
-    "@types/cookie-parser": "^1.4.10",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@types/jsdom": "^28.0.3",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/multer": "^2.1.0",
-    "@types/node": "^26.1.0",
-    "@types/nodemailer": "^8.0.1",
-    "@types/pg": "^8.20.0",
-    "drizzle-kit": "^0.31.10",
-    "prettier": "^3.5.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsdom": "^21.1.7",
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/node": "^22.10.1",
+    "@types/nodemailer": "^6.4.17",
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.30.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }
