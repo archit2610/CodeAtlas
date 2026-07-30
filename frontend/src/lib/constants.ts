@@ -1,4 +1,6 @@
-export const API_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000/api/v1';
+const rawApiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000/api/v1';
+const cleanedUrl = rawApiUrl.trim().replace(/\/$/, '');
+export const API_URL = cleanedUrl.endsWith('/api/v1') ? cleanedUrl : `${cleanedUrl}/api/v1`;
 
 export const ROUTES = {
   HOME: '/',
