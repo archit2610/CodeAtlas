@@ -123,12 +123,14 @@ export const Dashboard: React.FC = () => {
           }
         } catch (e) {
           console.warn('Could not restore saved repo from localStorage:', e);
+          localStorage.removeItem('codeatlas_active_repo_id');
         }
       }
 
       await loadDemoRepository();
     } catch (error) {
       console.warn('Could not restore visitor session, loading demo repo:', error);
+      localStorage.removeItem('codeatlas_active_repo_id');
       await loadDemoRepository();
     } finally {
       setIsImporting(false);
