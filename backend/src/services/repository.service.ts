@@ -248,8 +248,14 @@ async function saveScannedRepository(repoId: string, files: ScannedFile[]) {
     return updated;
 }
 
-export const getRepository = (id: string, visitorId: string) =>
-    db.select().from(repositories).where(and(eq(repositories.id, id), eq(repositories.visitorId, visitorId))).then(r => r[0] ?? null);
+export const getRepository = async (id: string, visitorId?: string) => {
+    if (visitorId) {
+        const [repo] = await db.select().from(repositories).where(and(eq(repositories.id, id), eq(repositories.visitorId, visitorId)));
+        if (repo) return repo;
+    }
+    const [repo] = await db.select().from(repositories).where(eq(repositories.id, id));
+    return repo ?? null;
+};
 
 export const getTree = (id: string) =>
     db.select({
